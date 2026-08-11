@@ -515,27 +515,36 @@ async function fetchMLB() {
           };
         });
       }
-      const map = {
-        hits: 'hits',
-        homeRuns: 'homeRuns',
-        rbis: 'rbi',
-        walks: 'baseOnBalls',
-        strikeouts: 'strikeOuts',
-      };
+      // PITCHING splits report hits/HR/RBI *allowed* (not batting stats) —
+      // for pitchers only strikeouts (K's) may come from the pitching group.
+      // Every batter-style prop (totalBases/hits/HR/RBI/walks) must come from
+      // the hitting group only, or a starter looks like a .600 hitter.
+      const map = group === 'pitching'
+        ? { strikeouts: 'strikeOuts' }
+        : {
+            hits: 'hits',
+            homeRuns: 'homeRuns',
+            rbis: 'rbi',
+            walks: 'baseOnBalls',
+            strikeouts: 'strikeOuts',
+          };
       for (const [prop, key] of Object.entries(map)) {
         const values = ordered.map(sp => toNum(sp.stat?.[key])).filter(v => v !== null);
         if (values.length >= 2 && !(prop in logs)) {
           logs[prop] = values;
         }
       }
-      // totalBases per game
-      const tb = ordered.map(sp => {
-        const st = sp.stat || {};
-        if (st.hits === undefined) return null;
-        return toNum((st.hits || 0) + (st.doubles || 0) + 2 * (st.triples || 0) + 3 * (st.homeRuns || 0));
-      }).filter(v => v !== null);
-      if (tb.length >= 2 && !('totalBases' in logs)) {
-        logs.totalBases = tb;
+      // totalBases per game — batting group only (pitching splits carry no
+      // doubles/triples for the batter and hits there = hits allowed)
+      if (group === 'hitting') {
+        const tb = ordered.map(sp => {
+          const st = sp.stat || {};
+          if (st.hits === undefined) return null;
+          return toNum((st.hits || 0) + (st.doubles || 0) + 2 * (st.triples || 0) + 3 * (st.homeRuns || 0));
+        }).filter(v => v !== null);
+        if (tb.length >= 2 && !('totalBases' in logs)) {
+          logs.totalBases = tb;
+        }
       }
     }
     if (!Object.keys(logs).length) return null;

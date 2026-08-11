@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useContext, useCallback } from 'react'
 import './index.css'
 import Filters from './components/Filters'
-import MoneylineTable from './components/MoneylineTable'
 import useProps from './hooks/useProps'
 import AuthModal from './components/AuthModal'
 import { AuthProvider, AuthContext } from './context/AuthContext'
@@ -11,7 +10,7 @@ import PlayerDetailModal from './components/PlayerDetailModal'
 
 function AppContent() {
   const [sport, setSport] = useState('NBA')
-  const { propData, moneylineData, loading, error } = useProps(sport)
+  const { propData, loading, error } = useProps(sport)
   const [filters, setFilters] = useState({})
   const [activeTab, setActiveTab] = useState('props') // 'props', 'picks'
   
@@ -282,11 +281,9 @@ function AppContent() {
               </div>
             )}
 
-            <MoneylineTable moneylineData={moneylineData} />
           </>
         )}
       </main>
-
       {/* ── Props Optimizer Bottom Navigation Bar ─────────────────── */}
       <nav className="bottom-nav-bar">
         <div className={`bottom-nav-item ${activeTab === 'props' ? 'active' : ''}`} onClick={() => setActiveTab('props')}>

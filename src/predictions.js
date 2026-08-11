@@ -33,16 +33,15 @@ function decayWeights(n) {
   return weights.map(w => w / sum);
 }
 
-/** Round a model line sensibly: counting stats to integer, others to 0.5.
- *  Never below 0.5 — a 0 line makes every outcome "over" and is meaningless. */
-const INT_PROPS = new Set([
-  'hits', 'homeRuns', 'rbis', 'walks', 'strikeouts', 'totalBases',
-  'passingTDs', 'interceptions', 'receptions', 'steals', 'blocks',
-  'threePointersMade', 'goals', 'assists', 'saves', 'shotsOnGoal',
-  'plusMinus', 'powerPlayPoints',
-]);
-function roundLine(value, propName) {
-  const raw = INT_PROPS.has(propName) ? Math.round(value) : Math.round(value * 2) / 2;
+/**
+ * Model line — always a half-line (0.5/1.5/2.5/...), the sportsbook standard.
+ * A line is never an integer: integer lines push when the outcome lands
+ * exactly on them, and backtests showed half-lines beat integer lines in
+ * every sport. Never below 0.5 (a 0 line makes every outcome "over").
+ */
+function roundLine(value) {
+  let raw = Math.round(value * 2) / 2;
+  if (raw % 1 === 0) raw += 0.5; // nudge integer lines up a half
   return Math.max(0.5, raw);
 }
 
@@ -171,7 +170,7 @@ function computePropPredictions(sport, players, propsLinesMap) {
       // Real sportsbook line when available, otherwise a clearly-labelled model line
       const lineKey = `${normName(p.name)}|${propName}`;
       const book = propsLinesMap ? propsLinesMap.get(lineKey) : null;
-      const line = book ? book.line : roundLine(predictedValue, propName);
+      const line = book ? book.line : roundLine(predictedValue);
 
       // Hit rates against the line from REAL games
       const last10 = recent.slice(0, 10);

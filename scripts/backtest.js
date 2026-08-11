@@ -1,31 +1,51 @@
 // scripts/backtest.js
 /**
- * Walk-forward backtest of the prop prediction engine.
+ * Walk-forward backtest of the prop prediction engine + prop-level diagnostics.
  *
  * For every player + prop with enough history, we walk through each game:
- *   - predict game t using ONLY games [0, t) (the model as it would have
- *     been at that moment — no lookahead)
+ *   - predict game t using ONLY games [0, t) (no lookahead)
  *   - compare the over/under call against the real outcome
  *
- * Variants compared:
- *   V1  current engine (decay-weighted recent avg, rounded line, floor 0.5)
- *   V2  line anchored to season average (books-style)
- *   V3  line from 50/50 blend of recent-weighted pred + season avg
- *   V4  empirical P(over): fraction of the last 15 games that cleared the
- *       V1 line; pick over when P >= 0.5, edge = |P - 0.5|
+ * Variants (empirical P uses the production formula: (hits+1)/(n+2) over the
+ * last 15 games vs the line, with Beta shrinkage):
+ *   V1  old engine: call = pred >= integer-rounded line
+ *   V4  production engine v2: pick = empirical P >= 0.5 vs integer line
+ *   V5  candidate: empirical P vs HALF-line (0.5/1.5/2.5 — book standard)
  *
- * Baselines: always-over / always-under at each variant's own lines, and 50%.
+ * Diagnostics per prop: sample size, accuracy of each variant, over-call rate,
+ * push rate (outcome exactly on the line), outcome std dev, and accuracy when
+ * the model has >= 0.2 edge.
  *
  * Usage: node scripts/backtest.js [sport]
  */
+const fs = require('fs');
+const path = require('path');
 const { fetchPlayers } = require('../src/services/fetchers');
-const { roundLine } = require('../src/predictions');
+const { roundLine } = require('../src/predictions'); // production v3: no-push half-lines
 
 const SPORTS = process.argv[2] ? [process.argv[2].toUpperCase()] : ['MLB', 'NFL', 'NBA', 'NHL'];
+
+/** Old production line scheme (pre-v3): counting stats integer, others 0.5. */
+const OLD_INT_PROPS = new Set([
+  'hits', 'homeRuns', 'rbis', 'walks', 'strikeouts', 'totalBases',
+  'passingTDs', 'interceptions', 'receptions', 'steals', 'blocks',
+  'threePointersMade', 'goals', 'assists', 'saves', 'shotsOnGoal',
+  'plusMinus', 'powerPlayPoints',
+]);
+function oldRoundLine(value, propName) {
+  const raw = OLD_INT_PROPS.has(propName) ? Math.round(value) : Math.round(value * 2) / 2;
+  return Math.max(0.5, raw);
+}
 
 function mean(arr) {
   if (!arr.length) return 0;
   return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function std(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / (arr.length - 1));
 }
 
 function decayWeights(n) {
@@ -52,26 +72,22 @@ function predictValue(pastChrono, seasonAvg) {
   return seasonAvg;
 }
 
-/** V1 grade: last-10 hit rate vs the line. */
-function gradeFor(pastChrono, line) {
-  const last10 = [...pastChrono].slice(-10).reverse();
-  if (!last10.length) return 'D';
-  const hit = last10.filter(v => v >= line).length / last10.length;
-  return hit >= 0.7 ? 'A' : hit >= 0.6 ? 'B' : hit >= 0.5 ? 'C' : 'D';
+/** Production empirical P(over) with shrinkage. */
+function pOverShrunken(pastChrono, line, window = 15) {
+  const last = [...pastChrono].slice(-window);
+  if (last.length < 3) return null;
+  const hits = last.filter(v => v >= line).length;
+  return (hits + 1) / (last.length + 2);
 }
 
 async function backtestSport(sport) {
   const players = await fetchPlayers(sport);
-  const rows = []; // one row per (player, prop, game)
   const byProp = {};
-  const byGrade = { A: { n: 0, correct: 0 }, B: { n: 0, correct: 0 }, C: { n: 0, correct: 0 }, D: { n: 0, correct: 0 } };
-  const byVenue = { home: { n: 0, correct: 0, sum: 0 }, away: { n: 0, correct: 0, sum: 0 } };
 
   for (const p of players) {
     for (const [prop, logsRecentFirst] of Object.entries(p.gameLogs || {})) {
       if (!Array.isArray(logsRecentFirst) || logsRecentFirst.length < 15) continue;
       const chrono = [...logsRecentFirst].reverse(); // oldest first
-      const gamesMeta = (p.games || []).slice().reverse(); // chronological to match
       const N = chrono.length;
 
       for (let t = 10; t < N; t++) {
@@ -79,119 +95,109 @@ async function backtestSport(sport) {
         const seasonAvg = mean(past);
         const pred = predictValue(past, seasonAvg);
 
-        const line1 = roundLine(pred, prop);
-        const line2 = roundLine(seasonAvg, prop);
-        const line3 = roundLine(0.5 * pred + 0.5 * seasonAvg, prop);
+        const line1 = oldRoundLine(pred, prop); // old engine's line (reference)
+        const line5 = roundLine(pred);           // production v3: no-push half-line
 
         const outcome = chrono[t];
-        const venue = gamesMeta[t]?.homeAway || '';
 
-        // V4: empirical over probability from last 15 games vs line1
-        const last15 = [...past].slice(-15);
-        const pOver = last15.filter(v => v >= line1).length / last15.length;
+        const pOver1 = pOverShrunken(past, line1);
+        const pOver5 = pOverShrunken(past, line5);
 
-        rows.push({ player: p.name, prop, t, outcome, pred, seasonAvg, line1, line2, line3, pOver, venue });
+        const rec = byProp[prop] || (byProp[prop] = { n: 0, v1: 0, v4: 0, v5: 0, over5: 0, push5: 0, edgeN5: 0, edge5: 0, sum: 0, sumsq: 0 });
 
-        // Grade calibration (V1)
-        const grade = gradeFor(past, line1);
-        const call = pred >= line1;
-        const correct = call === (outcome >= line1);
-        byGrade[grade].n++;
-        if (correct) byGrade[grade].correct++;
+        rec.n++;
+        rec.sum += outcome;
+        rec.sumsq += outcome * outcome;
 
-        if (venue === 'home' || venue === 'away') {
-          byVenue[venue].n++;
-          if (correct) byVenue[venue].correct++;
-          byVenue[venue].sum += outcome;
+        const callV1 = pred >= line1;
+        if (callV1 === (outcome >= line1)) rec.v1++;
+
+        if (pOver1 !== null) {
+          const callV4 = pOver1 >= 0.5;
+          if (callV4 === (outcome >= line1)) rec.v4++;
         }
 
-        if (!byProp[prop]) byProp[prop] = { n: 0, correct: 0, overRate: 0 };
-        byProp[prop].n++;
-        if (correct) byProp[prop].correct++;
-        if (outcome >= line1) byProp[prop].overRate++;
+        if (pOver5 !== null) {
+          const callV5 = pOver5 >= 0.5;
+          if (callV5 === (outcome >= line5)) rec.v5++;
+          if (callV5) rec.over5++;
+          if (outcome === line5) rec.push5++;
+          const edge = Math.abs(pOver5 - 0.5);
+          if (edge >= 0.2) {
+            rec.edgeN5++;
+            if (callV5 === (outcome >= line5)) rec.edge5++;
+          }
+        }
       }
     }
   }
 
-  const acc = (rowsArr, lineKey) => {
-    const n = rowsArr.length;
-    if (!n) return { n: 0, acc: 0, overCall: 0 };
-    let correct = 0;
-    let overCall = 0;
-    for (const r of rowsArr) {
-      const line = r[lineKey];
-      const call = r.pred >= line;
-      if (call) overCall++;
-      if (call === (r.outcome >= line)) correct++;
-    }
-    return { n, acc: correct / n, overCall: overCall / n };
+  const props = Object.entries(byProp).map(([prop, r]) => {
+    const n = r.n;
+    const avg = r.sum / n;
+    const variance = n > 1 ? (r.sumsq - n * avg * avg) / (n - 1) : 0;
+    return {
+      prop,
+      n,
+      v1Acc: r.v1 / n,
+      v4Acc: r.v4 / n,
+      v5Acc: r.v5 / n,
+      overRate: r.over5 / n,
+      pushRate: r.push5 / n,
+      std: Math.sqrt(Math.max(variance, 0)),
+      edgeN: r.edgeN5,
+      edgeAcc: r.edgeN5 ? r.edge5 / r.edgeN5 : null,
+    };
+  });
+
+  const total = props.reduce((a, p) => a + p.n, 0);
+  const agg = (fn) => {
+    let n = 0, s = 0;
+    for (const p of props) { n += p.n; s += p.n * fn(p); }
+    return n ? s / n : 0;
   };
 
-  // V4 accuracy: pick = pOver >= 0.5 (call over when empirical P >= 0.5)
-  const v4 = { n: rows.length, correct: 0, overCall: 0, edgeCorrect: 0, edgeN: 0 };
-  for (const r of rows) {
-    const call = r.pOver >= 0.5;
-    const correct = call === (r.outcome >= r.line1);
-    if (call) v4.overCall++;
-    if (correct) v4.correct++;
-    const edge = Math.abs(r.pOver - 0.5);
-    if (edge >= 0.2) {
-      v4.edgeN++;
-      if (correct) v4.edgeCorrect++;
-    }
-  }
-
-  // Edge buckets for V1: |pred - line1|
-  const edges = { '>= 1.5': { n: 0, correct: 0 }, '1.0-1.5': { n: 0, correct: 0 }, '0.5-1.0': { n: 0, correct: 0 }, '< 0.5': { n: 0, correct: 0 } };
-  for (const r of rows) {
-    const e = Math.abs(r.pred - r.line1);
-    const bucket = e >= 1.5 ? '>= 1.5' : e >= 1.0 ? '1.0-1.5' : e >= 0.5 ? '0.5-1.0' : '< 0.5';
-    edges[bucket].n++;
-    if ((r.pred >= r.line1) === (r.outcome >= r.line1)) edges[bucket].correct++;
-  }
-
-  return {
+  const result = {
     sport,
     players: players.length,
-    samples: rows.length,
-    v1: acc(rows, 'line1'),
-    v2: acc(rows, 'line2'),
-    v3: acc(rows, 'line3'),
-    v4: { n: v4.n, acc: v4.n ? v4.correct / v4.n : 0, overCall: v4.n ? v4.overCall / v4.n : 0, edgeN: v4.edgeN, edgeAcc: v4.edgeN ? v4.edgeCorrect / v4.edgeN : 0 },
-    baselines: {
-      alwaysOver: rows.length ? rows.filter(r => r.outcome >= r.line1).length / rows.length : 0,
-      alwaysUnder: rows.length ? rows.filter(r => r.outcome < r.line1).length / rows.length : 0,
-    },
-    grades: Object.fromEntries(Object.entries(byGrade).map(([g, v]) => [g, { n: v.n, acc: v.n ? v.correct / v.n : 0 }])),
-    venues: Object.fromEntries(Object.entries(byVenue).map(([k, v]) => [k, { n: v.n, acc: v.n ? v.correct / v.n : 0, avg: v.n ? v.sum / v.n : 0 }])),
-    edges: Object.fromEntries(Object.entries(edges).map(([k, v]) => [k, { n: v.n, acc: v.n ? v.correct / v.n : 0 }])),
-    byProp: Object.fromEntries(Object.entries(byProp).map(([k, v]) => [k, { n: v.n, acc: v.correct / v.n, overRate: v.overRate / v.n }])),
+    samples: total,
+    v1Acc: agg(p => p.v1Acc),
+    v4Acc: agg(p => p.v4Acc),
+    v5Acc: agg(p => p.v5Acc),
+    v5OverRate: agg(p => p.overRate),
+    v5PushRate: agg(p => p.pushRate),
+    props,
   };
+
+  // Console: worst props under the production engine (V4) and the half-line candidate
+  console.log(`\n=== ${sport} (${total.toLocaleString()} samples, ${players.length} players) ===`);
+  console.log(`  old engine (V1)      : ${(result.v1Acc * 100).toFixed(1)}%`);
+  console.log(`  production P (V4)    : ${(result.v4Acc * 100).toFixed(1)}%`);
+  console.log(`  half-line P (V5)     : ${(result.v5Acc * 100).toFixed(1)}%  (over-call ${(result.v5OverRate * 100).toFixed(0)}%, push ${(result.v5PushRate * 100).toFixed(1)}%)`);
+  const sorted = [...props].sort((a, b) => a.v4Acc - b.v4Acc);
+  console.log('  worst props (by V4 acc):');
+  for (const p of sorted.slice(0, 6)) {
+    console.log(
+      `    ${p.prop.padEnd(14)} n=${String(p.n).padStart(6)} V1=${(p.v1Acc * 100).toFixed(1).padStart(5)}% V4=${(p.v4Acc * 100).toFixed(1).padStart(5)}% ` +
+      `V5=${(p.v5Acc * 100).toFixed(1).padStart(5)}% over=${(p.overRate * 100).toFixed(0)}% push=${(p.pushRate * 100).toFixed(0)}% std=${p.std.toFixed(2)} edgeN=${p.edgeN}`
+    );
+  }
+  console.log('  best props (by V4 acc):');
+  for (const p of sorted.slice(-4).reverse()) {
+    console.log(
+      `    ${p.prop.padEnd(14)} n=${String(p.n).padStart(6)} V1=${(p.v1Acc * 100).toFixed(1).padStart(5)}% V4=${(p.v4Acc * 100).toFixed(1).padStart(5)}% ` +
+      `V5=${(p.v5Acc * 100).toFixed(1).padStart(5)}% over=${(p.overRate * 100).toFixed(0)}% push=${(p.pushRate * 100).toFixed(0)}% std=${p.std.toFixed(2)} edgeN=${p.edgeN}`
+    );
+  }
+  return result;
 }
 
 (async () => {
   const all = [];
   for (const sport of SPORTS) {
-    console.log(`\n=== Backtesting ${sport} (fetching real data...) ===`);
-    const r = await backtestSport(sport);
-    all.push(r);
-    console.log(`players=${r.players} samples=${r.samples}`);
-    const fmt = (x) => `${(x.acc * 100).toFixed(1)}% (n=${x.n})`;
-    console.log(`  V1 current engine : ${fmt(r.v1)}  over-call=${(r.v1.overCall * 100).toFixed(0)}%`);
-    console.log(`  V2 season-avg line: ${fmt(r.v2)}  over-call=${(r.v2.overCall * 100).toFixed(0)}%`);
-    console.log(`  V3 blend line     : ${fmt(r.v3)}  over-call=${(r.v3.overCall * 100).toFixed(0)}%`);
-    console.log(`  V4 empirical P    : ${fmt(r.v4)}  over-call=${(r.v4.overCall * 100).toFixed(0)}%  edge(>=.2): ${(r.v4.edgeAcc * 100).toFixed(1)}% (n=${r.v4.edgeN})`);
-    console.log(`  baselines: alwaysOver=${(r.baselines.alwaysOver * 100).toFixed(1)}% alwaysUnder=${(r.baselines.alwaysUnder * 100).toFixed(1)}%`);
-    console.log(`  by grade: ${Object.entries(r.grades).map(([g, v]) => `${g}:${(v.acc * 100).toFixed(0)}%`).join(' ')}`);
-    console.log(`  by venue: ${Object.entries(r.venues).map(([k, v]) => `${k}:${(v.acc * 100).toFixed(0)}% avg=${v.avg.toFixed(1)}`).join(' ')}`);
-    console.log(`  edge buckets: ${Object.entries(r.edges).map(([k, v]) => `${k}:${(v.acc * 100).toFixed(0)}%`).join(' ')}`);
-    console.log('  worst props:');
-    Object.entries(r.byProp).sort((a, b) => a[1].acc - b[1].acc).slice(0, 4).forEach(([k, v]) =>
-      console.log(`    ${k}: acc=${(v.acc * 100).toFixed(1)}% n=${v.n} overRate=${(v.overRate * 100).toFixed(0)}%`));
+    all.push(await backtestSport(sport));
   }
-  require('fs').writeFileSync(
-    require('path').join(__dirname, '..', 'data', 'backtest.json'),
-    JSON.stringify(all, null, 2)
-  );
+  fs.mkdirSync(path.join(__dirname, '..', 'data'), { recursive: true });
+  fs.writeFileSync(path.join(__dirname, '..', 'data', 'backtest.json'), JSON.stringify(all, null, 2));
   console.log('\nSaved data/backtest.json');
 })();

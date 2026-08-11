@@ -80,6 +80,12 @@ function PlayerDetailModal({ prop, onClose }) {
   const confLower = typeof conf === 'object' && conf !== null ? conf.lower : null;
   const confUpper = typeof conf === 'object' && conf !== null ? conf.upper : null;
 
+  // Model pick: deterministic over/under call with probability + edge
+  const modelPick = prop.modelPick || null;
+  const modelProb = prop.modelProbability != null ? Number(prop.modelProbability) : null;
+  const modelEdge = prop.modelEdge != null ? Number(prop.modelEdge) : null;
+  const bookOdds = Array.isArray(prop.bookOdds) ? prop.bookOdds : [];
+
   const sources = (Array.isArray(prop.sourceMetadata) ? prop.sourceMetadata : []).filter(Boolean).join(', ');
 
   const lineSource = prop.lineSource || prop.line_source || '';
@@ -361,6 +367,108 @@ function PlayerDetailModal({ prop, onClose }) {
             </div>
           )}
         </div>
+
+        {/* ── Model pick ──────────────────────────────────────── */}
+        {modelPick && (
+          <div style={{
+            marginTop: '0.85rem',
+            background: modelPick === 'over' ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)',
+            border: `1px solid ${modelPick === 'over' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            borderRadius: '16px',
+            padding: '0.85rem 1rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
+                  Model Pick
+                </div>
+                <div style={{ marginTop: '0.25rem', fontSize: '1.3rem', fontWeight: 800, lineHeight: 1.2 }}>
+                  <span style={{ color: modelPick === 'over' ? '#34d399' : '#f87171' }}>
+                    {modelPick.toUpperCase()} {fmt(line)}
+                  </span>
+                  {modelProb !== null && (
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem', marginLeft: '0.45rem' }}>
+                      {Math.round(modelProb * 100)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              {modelEdge !== null && (
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <span style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    color: modelPick === 'over' ? '#34d399' : '#f87171',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: 'var(--radius-pill)',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    display: 'inline-block',
+                  }}>
+                    Edge {Math.round(modelEdge * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+            {modelProb !== null && (
+              <div style={{
+                marginTop: '0.6rem',
+                height: '6px',
+                borderRadius: '3px',
+                background: 'rgba(255,255,255,0.08)',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${Math.round(modelProb * 100)}%`,
+                  height: '100%',
+                  borderRadius: '3px',
+                  background: modelPick === 'over'
+                    ? 'linear-gradient(90deg, #047857, #34d399)'
+                    : 'linear-gradient(90deg, #991b1b, #f87171)',
+                }} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Book odds (real sportsbook lines when available) ── */}
+        {bookOdds.length > 0 && (
+          <div style={{
+            marginTop: '0.85rem',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '16px',
+            padding: '0.85rem 1rem',
+          }}>
+            <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+              Book Odds
+            </div>
+            {bookOdds.map((b, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.6rem',
+                padding: '0.3rem 0',
+                borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                fontSize: '0.78rem',
+              }}>
+                <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{b.book}</span>
+                <span style={{ display: 'flex', gap: '0.5rem' }}>
+                  {b.overPrice != null && (
+                    <span style={{ color: '#34d399', fontWeight: 700 }}>
+                      O{fmt(line)} {b.overPrice > 0 ? `+${b.overPrice}` : b.overPrice}
+                    </span>
+                  )}
+                  {b.underPrice != null && (
+                    <span style={{ color: '#f87171', fontWeight: 700 }}>
+                      U{fmt(line)} {b.underPrice > 0 ? `+${b.underPrice}` : b.underPrice}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── Chart + Last 5 / Last 10 toggle ──────────────────── */}
         <div style={panelStyle}>

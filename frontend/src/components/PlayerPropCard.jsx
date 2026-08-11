@@ -177,6 +177,32 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
         </span>
       </div>
 
+      {/* ── Model pick chip ─────────────────────────────────── */}
+      {player.modelPick && (
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.45rem' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            fontSize: '0.72rem',
+            fontWeight: 800,
+            letterSpacing: '0.03em',
+            color: player.modelPick === 'over' ? '#34d399' : '#f87171',
+            background: player.modelPick === 'over' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+            border: `1px solid ${player.modelPick === 'over' ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+            padding: '0.25rem 0.6rem',
+            borderRadius: '999px',
+          }}>
+            MODEL: {player.modelPick.toUpperCase()} {line % 1 === 0 ? line : line.toFixed(1)}
+            {player.modelProbability != null && (
+              <span style={{ fontWeight: 600, opacity: 0.85 }}>
+                · {Math.round(player.modelProbability * 100)}%
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
       {/* ── Mini Bar Chart ───────────────────────────────────── */}
       <div style={{ background: '#0f141f', borderRadius: '10px', padding: '0.6rem', border: '1px solid rgba(255,255,255,0.08)' }}>
         {chartView === 'season' ? (

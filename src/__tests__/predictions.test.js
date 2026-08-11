@@ -87,6 +87,12 @@ describe('computePredictions', () => {
           expect(typeof item.last5HitPct).toBe('number');
           expect(['A', 'B', 'C', 'D']).toContain(item.grade);
           expect(['sportsbook', 'model']).toContain(item.lineSource);
+          expect(['over', 'under']).toContain(item.modelPick);
+          if (item.modelProbability !== null) {
+            expect(item.modelProbability).toBeGreaterThanOrEqual(0);
+            expect(item.modelProbability).toBeLessThanOrEqual(1);
+          }
+          expect(Array.isArray(item.bookOdds)).toBe(true);
         });
 
         // Assert moneyline_predictions is an array where each item has teamId,
@@ -130,8 +136,26 @@ describe('computePredictions', () => {
         {
           market: 'player_points',
           player: { name: 'Shai Gilgeous-Alexander' },
-          outcomes: [{ name: 'Over 31.5', point: 31.5, price: -110 }],
+          name: 'Over 31.5',
+          point: 31.5,
+          price: -110,
           bookmaker: 'DraftKings',
+        },
+        {
+          market: 'player_points',
+          player: { name: 'Shai Gilgeous-Alexander' },
+          name: 'Under 31.5',
+          point: 31.5,
+          price: -120,
+          bookmaker: 'DraftKings',
+        },
+        {
+          market: 'player_points',
+          player: { name: 'Shai Gilgeous-Alexander' },
+          name: 'Over 31.5',
+          point: 31.5,
+          price: -105,
+          bookmaker: 'FanDuel',
         },
       ];
       const result = computePredictions('NBA', players, [], propsLines);
@@ -140,7 +164,15 @@ describe('computePredictions', () => {
       );
       expect(item.line).toBe(31.5);
       expect(item.lineSource).toBe('sportsbook');
-      expect(item.bookmaker).toBe('DraftKings');
+      // Headline = best (most positive) over price across books
+      expect(item.bookmaker).toBe('FanDuel');
+      expect(item.bookOdds).toEqual([
+        { book: 'DraftKings', overPrice: -110, underPrice: -120 },
+        { book: 'FanDuel', overPrice: -105, underPrice: null },
+      ]);
+      // Model pick must be a deterministic over/under vs the book line
+      expect(['over', 'under']).toContain(item.modelPick);
+      expect(item.modelProbability).not.toBeNull();
     });
 
     it('labels the line as model when no sportsbook prop odds exist', () => {

@@ -10,12 +10,13 @@ function Filters({ sport, teamsData, propTypesData, onChange }) {
   });
 
   useEffect(() => {
-    // reset filters on sport change and default to first propName
-    const defaultProp = propTypesData.length > 0 ? propTypesData[0] : '';
-    const defaultFilters = { team: '', propName: defaultProp, position: '', extra: '', grades: [] };
+    // Reset filters only when the sport changes (NOT on every parent render —
+    // onChange must be stable for this to be safe; see App.jsx useCallback).
+    const defaultFilters = { team: '', propName: '', position: '', extra: '', grades: [] };
     setFilters(defaultFilters);
     onChange(defaultFilters);
-  }, [sport, propTypesData, onChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sport]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useContext } from 'react'
+import { useState, useEffect, useMemo, useContext, useCallback } from 'react'
 import './index.css'
 import Filters from './components/Filters'
 import MoneylineTable from './components/MoneylineTable'
@@ -18,9 +18,11 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [selectedProp, setSelectedProp] = useState(null)
 
-  const handleFilterChange = (newFilters) => {
+  // Stable identity — Filters' reset effect depends on this; a new function
+  // every render would trigger the reset loop that wiped grade selections.
+  const handleFilterChange = useCallback((newFilters) => {
     setFilters(newFilters)
-  }
+  }, [])
 
   // Favorites handling
   const [favorites, setFavorites] = useState(() => {

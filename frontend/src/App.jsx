@@ -6,6 +6,7 @@ import useProps from './hooks/useProps'
 import AuthModal from './components/AuthModal'
 import { AuthProvider, AuthContext } from './context/AuthContext'
 import PlayerPropCard from './components/PlayerPropCard'
+import API_URL from './api'
 import PlayerDetailModal from './components/PlayerDetailModal'
 
 function AppContent() {
@@ -33,7 +34,7 @@ function AppContent() {
   // Fetch server favorites when logged in
   useEffect(() => {
     if (user && token) {
-      fetch('http://localhost:3000/api/favorites', {
+      fetch(`${API_URL}/api/favorites`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => res.json())
@@ -64,13 +65,13 @@ function AppContent() {
     if (user && token) {
       try {
         if (isAdding) {
-          await fetch('http://localhost:3000/api/favorites', {
+          await fetch(`${API_URL}/api/favorites`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ playerId, sport })
           })
         } else {
-          await fetch(`http://localhost:3000/api/favorites/${playerId}`, {
+          await fetch(`${API_URL}/api/favorites/${playerId}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           })

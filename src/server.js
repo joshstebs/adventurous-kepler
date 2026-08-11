@@ -10,7 +10,8 @@ const { computePredictions } = require('./predictions');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Port 3000 is used by PropPicks (Josh's other app) — this app lives on 3005.
+const PORT = process.env.PORT || 3005;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Allow the Vite dev server (localhost:5173) and any other origin to call the API

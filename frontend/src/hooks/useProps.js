@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import API_URL from '../api';
 
 /**
  * useProps – custom hook that fetches prop and moneyline predictions
@@ -22,7 +23,7 @@ function useProps(sport) {
     setPropData([]);
     setMoneylineData([]);
 
-    const url = `http://localhost:3000/api/${sport.toLowerCase()}`;
+    const url = `${API_URL}/api/${sport.toLowerCase()}`;
 
     fetch(url)
       .then((res) => {

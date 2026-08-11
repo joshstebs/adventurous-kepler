@@ -235,6 +235,7 @@ function AppContent() {
           sport={sport}
           teamsData={teamsData}
           propTypesData={propTypesData}
+          grades={filters.grades}
           onChange={handleFilterChange}
         />
 
@@ -264,7 +265,7 @@ function AppContent() {
               <div className="card-grid" style={{ gap: '1.25rem' }}>
                 {filteredData.map(item => (
                   <PlayerPropCard 
-                    key={item.playerId || item.id || Math.random().toString()} 
+                    key={`${item.playerId || item.id}-${item.propName}`}
                     player={item} 
                     sport={sport} 
                     isFavorite={favorites.includes(item.playerId || item.id)} 

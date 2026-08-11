@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function Filters({ sport, teamsData, propTypesData, onChange }) {
+function Filters({ sport, teamsData, propTypesData, grades = [], onChange }) {
   const [filters, setFilters] = useState({
     team: '',
     propName: '',
@@ -8,6 +8,13 @@ function Filters({ sport, teamsData, propTypesData, onChange }) {
     extra: '',
     grades: []
   });
+
+  // Keep the panel's grade buttons in sync with the header pills (single
+  // source of truth is App's filters state). No onChange call here — this
+  // only mirrors state downward.
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, grades }));
+  }, [grades]);
 
   useEffect(() => {
     // Reset filters only when the sport changes (NOT on every parent render —

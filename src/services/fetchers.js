@@ -191,6 +191,31 @@ function enrichEspnPlayer(pl, gl, leagueSlug, logoAbbrev) {
   };
 }
 
+/** Next upcoming game for an ESPN team (schedule endpoint). */
+async function espnNextGame(league, teamId) {
+  const data = await safeGet(
+    `https://site.api.espn.com/apis/site/v2/sports/${league}/teams/${teamId}/schedule`,
+    'ESPN schedule'
+  );
+  const now = Date.now();
+  for (const ev of data?.events || []) {
+    const start = new Date(ev.date).getTime();
+    if (!Number.isFinite(start) || start <= now) continue;
+    const comp = ev.competitions?.[0];
+    if (!comp) return null;
+    const me = comp.competitors?.find(c => String(c.team?.id) === String(teamId));
+    const opp = comp.competitors?.find(c => String(c.team?.id) !== String(teamId));
+    if (!opp) return null;
+    return {
+      date: ev.date,
+      opponent: opp.team?.displayName || opp.team?.name || null,
+      opponentAbbrev: opp.team?.abbreviation || null,
+      homeAway: me?.homeAway === 'home' ? 'home' : 'away',
+    };
+  }
+  return null;
+}
+
 // ─── NFL ───────────────────────────────────────────────────────────────────────
 const NFL_PROP_MAP = {
   passingYards: 'passingYards',
@@ -209,6 +234,13 @@ async function fetchNFL() {
     team: t,
     players: await espnRoster('football/nfl', t.id),
   }));
+
+  // Next upcoming game per team
+  const nextByTeam = {};
+  await mapLimit(teams, 6, async t => {
+    const g = await espnNextGame('football/nfl', t.id);
+    if (g) nextByTeam[t.id] = g;
+  });
 
   // Per team take: QB1-2, RB1-2, WR1-3, TE1 (roster order = depth chart order)
   const selected = [];
@@ -237,7 +269,7 @@ async function fetchNFL() {
     const { logs, avgs } = buildLogsFromGames(gl.games, NFL_PROP_MAP);
     if (!Object.keys(logs).length) return null;
     return enrichEspnPlayer(
-      { ...pl, stats: avgs, gameLogs: logs, sources: ['ESPN NFL 2025-26'] },
+      { ...pl, nextGame: nextByTeam[pl.teamId] || null, stats: avgs, gameLogs: logs, sources: ['ESPN NFL 2025-26'] },
       gl,
       'nfl',
       pl.teamAbbrev
@@ -281,6 +313,13 @@ async function fetchNBA() {
     players: await espnRoster('basketball/nba', t.id),
   }));
 
+  // Next upcoming game per team
+  const nextByTeam = {};
+  await mapLimit(teams, 6, async t => {
+    const g = await espnNextGame('basketball/nba', t.id);
+    if (g) nextByTeam[t.id] = g;
+  });
+
   // Match the star list against real rosters by name
   const wanted = new Set(NBA_STAR_NAMES.map(normName));
   const matched = [];
@@ -317,7 +356,7 @@ async function fetchNBA() {
     }
     if (!Object.keys(logs).length) return null;
     return enrichEspnPlayer(
-      { ...pl, stats: avgs, gameLogs: logs, sources: ['ESPN NBA 2025-26'] },
+      { ...pl, nextGame: nextByTeam[pl.teamId] || null, stats: avgs, gameLogs: logs, sources: ['ESPN NBA 2025-26'] },
       gl,
       'nba',
       pl.teamAbbrev
@@ -417,6 +456,37 @@ async function fetchMLB() {
   validPlayers.sort((a, b) => (b.stats.hits + b.stats.strikeouts) - (a.stats.hits + a.stats.strikeouts));
   const top = validPlayers.slice(0, 60);
 
+  // Next upcoming game per team (one league-wide schedule call)
+  const nextByTeam = {};
+  {
+    const today = new Date().toISOString().slice(0, 10);
+    const end = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
+    const sched = await safeGet(
+      `https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${today}&endDate=${end}&gameType=R`,
+      'MLB schedule'
+    );
+    const now = Date.now();
+    for (const d of sched?.dates || []) {
+      for (const g of d.games || []) {
+        const start = new Date(g.gameDate).getTime();
+        if (!Number.isFinite(start) || start <= now) continue;
+        for (const side of ['away', 'home']) {
+          const tid = g.teams?.[side]?.team?.id;
+          if (tid === undefined || nextByTeam[tid]) continue;
+          const oppSide = side === 'away' ? 'home' : 'away';
+          const oppTeam = g.teams?.[oppSide]?.team;
+          const oppInfo = oppTeam ? teamsMap[oppTeam.id] || {} : {};
+          nextByTeam[tid] = {
+            date: g.gameDate,
+            opponent: oppTeam?.name || oppInfo.name || null,
+            opponentAbbrev: oppInfo.abbreviation || null,
+            homeAway: side === 'home' ? 'home' : 'away',
+          };
+        }
+      }
+    }
+  }
+
   // Real per-game logs for the top players (hitting group; pitchers also get pitching logs)
   const withLogs = await mapLimit(top, 6, async pl => {
     const groups = pl.position === 'P' ? ['pitching', 'hitting'] : ['hitting'];
@@ -484,6 +554,7 @@ async function fetchMLB() {
       photoUrl:
         `https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:prof:current.png,q_auto:best,f_auto/v1/people/${pl.id}/headshot/67/current`,
       teamLogoUrl: pl.teamId ? `https://www.mlbstatic.com/team-logos/${pl.teamId}.svg` : null,
+      nextGame: nextByTeam[pl.teamId] || null,
       games: gamesMeta,
       stats,
       gameLogs: logs,
@@ -566,6 +637,35 @@ async function fetchNHL() {
     });
   });
 
+  // Next upcoming game per team (off-season -> empty, nextGame stays null)
+  const nextByTeam = {};
+  {
+    const sched = await safeGet('https://api-web.nhle.com/v1/schedule/now', 'NHL schedule');
+    const now = Date.now();
+    for (const w of sched?.gameWeek || []) {
+      for (const g of w.games || []) {
+        const t = g.startTimeUTC || g.gameDate;
+        const start = t ? new Date(t).getTime() : NaN;
+        if (!Number.isFinite(start) || start <= now) continue;
+        for (const side of ['awayTeam', 'homeTeam']) {
+          const team = g[side];
+          if (!team?.id || nextByTeam[team.id]) continue;
+          const oppSide = side === 'awayTeam' ? 'homeTeam' : 'awayTeam';
+          const opp = g[oppSide] || {};
+          nextByTeam[team.id] = {
+            date: t,
+            opponent:
+              (typeof opp.commonName === 'object' ? opp.commonName?.default : opp.commonName) ||
+              opp.abbrev ||
+              null,
+            opponentAbbrev: opp.abbrev || null,
+            homeAway: side === 'homeTeam' ? 'home' : 'away',
+          };
+        }
+      }
+    }
+  }
+
   // Real per-game logs
   const withLogs = await mapLimit(players, 8, async pl => {
     const data = await safeGet(
@@ -616,6 +716,7 @@ async function fetchNHL() {
       teamLogoUrl: pl.teamAbbrev
         ? `https://assets.nhle.com/logos/nhl/svg/${pl.teamAbbrev}_light.svg`
         : null,
+      nextGame: pl.teamId ? nextByTeam[Number(pl.teamId)] || null : null,
       games: ordered.map(g => {
         const oppName =
           (typeof g.opponentCommonName === 'object' && g.opponentCommonName?.default) ||

@@ -24,6 +24,15 @@ const pct = (v) => {
   return `${n}%`;
 };
 
+// Baseline color vs the line: green when the recent avg is at/above the line
+// (over is reachable), red when the line sits above the recent baseline.
+const baselineVsLine = (avg, line) => {
+  const n = Number(avg);
+  const l = Number(line);
+  if (isNaN(n) || isNaN(l)) return 'inherit';
+  return n >= l ? '#34d399' : '#f87171';
+};
+
 // Team abbrev fallback derived from the full team name
 const deriveAbbrev = (teamName) => {
   if (!teamName || teamName === '-') return '?';
@@ -211,6 +220,20 @@ function PlayerDetailModal({ prop, onClose }) {
               }}>
                 {propName}
               </span>
+              {prop.nextGame && (
+                <span style={{
+                  background: 'rgba(16,185,129,0.08)',
+                  border: '1px solid rgba(16,185,129,0.25)',
+                  color: '#34d399',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: 'var(--radius-pill)',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                }}>
+                  Next: {prop.nextGame.homeAway === 'away' ? '@' : 'vs'}{' '}
+                  {prop.nextGame.opponentAbbrev || prop.nextGame.opponent || 'TBD'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -372,11 +395,11 @@ function PlayerDetailModal({ prop, onClose }) {
           </div>
           <div className="stat-cell-box cell-cyan" style={activeCellStyle(range === 'last5', 'rgba(56, 189, 248, 0.7)')}>
             <span className="stat-cell-lbl">Last 5 Avg</span>
-            <span className="stat-cell-num">{last5Avg}</span>
+            <span className="stat-cell-num" style={{ color: baselineVsLine(last5Avg, line) }}>{last5Avg}</span>
           </div>
           <div className="stat-cell-box cell-cyan" style={activeCellStyle(range === 'last10', 'rgba(56, 189, 248, 0.7)')}>
             <span className="stat-cell-lbl">Last 10 Avg</span>
-            <span className="stat-cell-num">{last10Avg}</span>
+            <span className="stat-cell-num" style={{ color: baselineVsLine(last10Avg, line) }}>{last10Avg}</span>
           </div>
           <div className="stat-cell-box cell-green" style={activeCellStyle(range === 'last5', 'rgba(52, 211, 153, 0.7)')}>
             <span className="stat-cell-lbl">Last 5 Hit%</span>

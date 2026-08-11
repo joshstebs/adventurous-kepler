@@ -54,6 +54,20 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
 
   const teamAbbrev = player.teamAbbrev || getTeamAbbrev(teamName);
 
+  // Next upcoming game (from backend schedule data)
+  const nextGame = player.nextGame || null;
+  const fmtGameDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `${day} ${time.toLowerCase()}`;
+  };
+
+  // Line vs recent baselines: green when the line is beatable (<= avg)
+  const baselineColor = (avg) => (avg >= line ? '#34d399' : '#f87171');
+
   // Team avatar badge color map
   const getBadgeBg = (abbrev) => {
     if (abbrev.includes('LAL') || abbrev.includes('GSW')) return '#eab308'; // Yellow
@@ -101,7 +115,11 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
               ) : null}
               <span className="badge-tag-team" style={{ backgroundColor: badgeBg }}>{teamAbbrev}</span>
               <span className="badge-tag-league">{sport || 'NBA'}</span>
-              <span className="matchup-time-text">Tue 7:00pm vs Opp</span>
+              <span className="matchup-time-text">
+                {nextGame
+                  ? `${fmtGameDate(nextGame.date)} ${nextGame.homeAway === 'away' ? '@' : 'vs'} ${nextGame.opponentAbbrev || nextGame.opponent || 'TBD'}`
+                  : 'No upcoming game'}
+              </span>
             </div>
           </div>
         </div>
@@ -137,6 +155,26 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
           <span className="pill-box-title">Season Hit%</span>
           <span className="pill-box-val">{seasonHitPct}% O</span>
         </div>
+      </div>
+
+      {/* ── Line vs Baselines (last 5 / last 10 games) ──────── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.5rem',
+        padding: '0.45rem 0.15rem',
+        fontSize: '0.72rem',
+        color: '#94a3b8',
+      }}>
+        <span style={{ fontWeight: 700, letterSpacing: '0.04em' }}>
+          LINE <span style={{ color: 'var(--accent)' }}>{line % 1 === 0 ? line : line.toFixed(1)}</span>
+        </span>
+        <span>L5 <b style={{ color: baselineColor(last5Avg) }}>{last5Avg}</b></span>
+        <span>L10 <b style={{ color: baselineColor(last10Avg) }}>{last10Avg}</b></span>
+        <span title="Green = line at/below recent average (over is reachable); red = line above recent average">
+          ⓘ
+        </span>
       </div>
 
       {/* ── Mini Bar Chart ───────────────────────────────────── */}

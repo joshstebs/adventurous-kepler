@@ -33,7 +33,8 @@ function decayWeights(n) {
   return weights.map(w => w / sum);
 }
 
-/** Round a model line sensibly: counting stats to integer, others to 0.5. */
+/** Round a model line sensibly: counting stats to integer, others to 0.5.
+ *  Never below 0.5 — a 0 line makes every outcome "over" and is meaningless. */
 const INT_PROPS = new Set([
   'hits', 'homeRuns', 'rbis', 'walks', 'strikeouts', 'totalBases',
   'passingTDs', 'interceptions', 'receptions', 'steals', 'blocks',
@@ -41,8 +42,8 @@ const INT_PROPS = new Set([
   'plusMinus', 'powerPlayPoints',
 ]);
 function roundLine(value, propName) {
-  if (INT_PROPS.has(propName)) return Math.max(0, Math.round(value));
-  return Math.max(0, Math.round(value * 2) / 2);
+  const raw = INT_PROPS.has(propName) ? Math.round(value) : Math.round(value * 2) / 2;
+  return Math.max(0.5, raw);
 }
 
 /** Map Odds API market keys to our prop names. */

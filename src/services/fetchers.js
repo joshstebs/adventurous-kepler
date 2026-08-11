@@ -428,8 +428,12 @@ async function fetchMLB() {
         `MLB gameLog ${pl.name}`
       );
       const splits = data?.stats?.[0]?.splits || [];
-      // most recent first
-      const ordered = [...splits].reverse();
+      // most recent first; exclude appearances with no plate appearances
+      // (defensive subs / pinch runners — no chance to hit, shouldn't count
+      // against hit rates). Pitching logs don't carry atBats and pass through.
+      const ordered = [...splits]
+        .reverse()
+        .filter(sp => (sp.stat?.atBats ?? 1) > 0 || sp.stat?.gamesStarted > 0);
       if (!gamesMeta && ordered.length) {
         gamesMeta = ordered.map(sp => {
           const opp = teamsMap[sp.opponent?.id] || {};

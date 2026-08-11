@@ -148,5 +148,31 @@ describe('computePredictions', () => {
       const item = result.prop_predictions.find(p => p.propName === 'points');
       expect(item.lineSource).toBe('model');
     });
+
+    it('never produces a 0 model line (would make every outcome over)', () => {
+      // A part-time hitter barely above 0: lines must floor at 0.5
+      const players = [{
+        id: 'p-slump', name: 'Andrew McCutchen', teamId: 'PIT', teamName: 'Pittsburgh Pirates',
+        stats: { hits: 0.1, totalBases: 0.2, rbis: 0.0, walks: 0.1, homeRuns: 0.0, strikeouts: 0.8 },
+        gameLogs: {
+          hits: [0, 0, 0, 0, 1, 0, 0, 1],
+          totalBases: [0, 0, 0, 0, 1, 0, 0, 2],
+          rbis: [0, 0, 0, 0, 1, 0, 0, 0],
+          walks: [0, 0, 1, 0, 1, 0, 0, 1],
+          homeRuns: [0, 0, 0, 0, 0, 0, 0, 0],
+          strikeouts: [1, 0, 1, 1, 0, 1, 0, 1],
+        },
+        sources: ['MLB Stats API 2026'],
+      }];
+      const result = computePredictions('MLB', players);
+      result.prop_predictions.forEach(item => {
+        expect(item.line).toBeGreaterThanOrEqual(0.5);
+        // A player who went 0-for in his last 5 must NOT show 100% over
+        if (item.propName === 'hits') {
+          expect(item.last5HitPct).toBeLessThan(100);
+          expect(item.predictedValue).toBeLessThan(item.line);
+        }
+      });
+    });
   });
 });

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useContext } from 'react'
 import './index.css'
 import Filters from './components/Filters'
 import MoneylineTable from './components/MoneylineTable'
-import LoadingSpinner from './components/LoadingSpinner'
 import useProps from './hooks/useProps'
 import AuthModal from './components/AuthModal'
 import { AuthProvider, AuthContext } from './context/AuthContext'
@@ -154,7 +153,7 @@ function AppContent() {
         <div className="header-top">
           <div className="header-title">
             <span className="menu-icon">≡</span>
-            <span>Props Optimizer</span>
+            <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}>Props Optimizer</a>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -237,19 +236,30 @@ function AppContent() {
           onChange={handleFilterChange}
         />
 
-        {loading && <LoadingSpinner />}
-
-        {error && (
+        {loading ? (
+          <div className="card-grid" style={{ gap: '1.25rem' }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton-card" style={{ animationDelay: `${i * 0.08}s` }} />
+            ))}
+          </div>
+        ) : error ? (
           <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '2rem', borderRadius: 'var(--radius)', textAlign: 'center', border: '1px solid var(--danger)' }}>
             <h3>Error loading data</h3>
             <p>{error.message}</p>
           </div>
-        )}
-
-        {!loading && !error && (
+        ) : (
           <>
+            {/* Section title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
+              <span style={{ width: '4px', height: '18px', borderRadius: '2px', background: 'linear-gradient(180deg, var(--accent), var(--accent-purple))' }} />
+              <h2 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent)', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                Prop Predictions
+              </h2>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 600 }}>{filteredData.length}</span>
+            </div>
+
             {filteredData.length > 0 ? (
-              <div className="card-grid">
+              <div className="card-grid" style={{ gap: '1.25rem' }}>
                 {filteredData.map(item => (
                   <PlayerPropCard 
                     key={item.playerId || item.id || Math.random().toString()} 

@@ -27,6 +27,37 @@ function MoneylineTable({ moneylineData }) {
     );
   };
 
+  // Team info may be a plain string (legacy) or an object { teamName, teamLogoUrl, teamAbbrev }
+  const resolveTeam = (t) => {
+    if (t && typeof t === 'object') {
+      return {
+        name: t.teamName || t.name || '?',
+        logo: t.teamLogoUrl || t.logo || null,
+        abbrev: t.teamAbbrev || null,
+      };
+    }
+    return { name: t || '?', logo: null, abbrev: null };
+  };
+
+  const TeamLogo = ({ team }) => {
+    if (team.logo) {
+      return (
+        <img
+          src={team.logo}
+          alt={team.abbrev || 'team logo'}
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0 }}
+        />
+      );
+    }
+    if (team.abbrev) {
+      return <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'var(--text-dim)' }}>{team.abbrev}</span>;
+    }
+    return null;
+  };
+
   return (
     <div className="glass" style={{ marginTop: '2rem', padding: '0', overflow: 'hidden' }}>
       <button 
@@ -45,7 +76,10 @@ function MoneylineTable({ moneylineData }) {
           cursor: 'pointer'
         }}
       >
-        <span>Moneyline Predictions</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ width: '4px', height: '16px', borderRadius: '2px', background: 'linear-gradient(180deg, var(--accent), var(--accent-purple))' }} />
+          Moneyline Predictions
+        </span>
         <span style={{ 
           transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', 
           transition: 'transform 0.3s ease' 
@@ -73,12 +107,25 @@ function MoneylineTable({ moneylineData }) {
               {moneylineData.map((row, idx) => {
                 const edge = (row.modelImpliedOdds || 0) - (row.sportsbookOdds || 0);
                 const isPos = edge > 0;
+                const home = resolveTeam(row.homeTeam);
+                const away = resolveTeam(row.awayTeam);
                 return (
-                  <tr key={idx} style={{ animationDelay: `${idx * 0.05}s` }}>
+                  <tr
+                    key={idx}
+                    style={{ animationDelay: `${idx * 0.05}s`, transition: 'background 0.15s ease' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+                  >
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <span style={{ fontWeight: 600, color: '#fff' }}>{row.homeTeam} (H)</span>
-                        <span style={{ color: 'var(--text-muted)' }}>vs {row.awayTeam} (A)</span>
+                        <span style={{ fontWeight: 600, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <TeamLogo team={home} />
+                          {home.name} (H)
+                        </span>
+                        <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                          vs <TeamLogo team={away} />
+                          {away.name} (A)
+                        </span>
                       </div>
                     </td>
                     <td>{renderWinProbBar(row.homeWinProb, row.awayWinProb)}</td>

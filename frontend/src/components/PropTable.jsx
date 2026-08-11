@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import PlayerAvatar from './PlayerAvatar';
 
 function PropTable({ propsData, favorites = [], onToggleFavorite, onSelectProp }) {
   const [sortKey, setSortKey] = useState(null);
@@ -190,15 +191,40 @@ function PropTable({ propsData, favorites = [], onToggleFavorite, onSelectProp }
             {paginatedData.map((row, idx) => (
               <tr
                 key={row.id || `${row.playerId}-${idx}`}
-                style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer' }}
+                style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer', transition: 'background 0.15s ease' }}
                 onClick={() => onSelectProp && onSelectProp(row)}
                 title="View prop details"
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
               >
                 <td className="sticky-col" style={{ fontWeight: 600, color: '#fff' }}>
-                  {row.playerName || row.name || 'Unknown'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <PlayerAvatar
+                      size={26}
+                      photoUrl={row.photoUrl}
+                      teamLogoUrl={row.teamLogoUrl}
+                      teamAbbrev={row.teamAbbrev}
+                      name={row.playerName || row.name || 'Unknown'}
+                    />
+                    <span>{row.playerName || row.name || 'Unknown'}</span>
+                  </div>
                 </td>
                 <td>
-                  <span style={{ color: 'var(--text-muted)' }}>{row.teamName || row.team || row.teamId || '-'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {row.teamLogoUrl ? (
+                      <img
+                        src={row.teamLogoUrl}
+                        alt={row.teamAbbrev || 'team logo'}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                        style={{ width: 18, height: 18, objectFit: 'contain' }}
+                      />
+                    ) : row.teamAbbrev ? (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-dim)' }}>{row.teamAbbrev}</span>
+                    ) : null}
+                    <span style={{ color: 'var(--text-muted)' }}>{row.teamName || row.team || row.teamId || '-'}</span>
+                  </div>
                 </td>
                 <td>
                   <span style={{ background: 'var(--surface)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem' }}>

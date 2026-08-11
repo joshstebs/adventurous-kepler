@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import MiniBarChart from './MiniBarChart';
+import PlayerAvatar from './PlayerAvatar';
 
 function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectProp }) {
   const [chartView, setChartView] = useState('last5'); // 'last5', 'last10', 'season'
@@ -18,6 +19,10 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
   const defaultLogs = Array(10).fill(0).map(() => Number((Math.max(1, (line || 10) + (Math.random() * 8 - 4))).toFixed(1)));
   const rawLogs = player.gameLogs || player.game_logs || defaultLogs;
   const gameLogs = (rawLogs || []).map(v => typeof v === 'object' && v !== null ? Number(v.value ?? v.val ?? 0) : Number(v) || 0);
+
+  // Opponents aligned with gameLogs (most recent first)
+  const rawGames = Array.isArray(player.games) ? player.games : null;
+  const shownOpponents = rawGames && (chartView === 'last5' ? rawGames.slice(0, 5) : rawGames.slice(0, 10));
 
   // Stats
   const last5HitPct = player.last5HitPct ?? 60;
@@ -47,7 +52,7 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
     return (words[0][0] + words[1][0] + words[2][0]).toUpperCase();
   };
 
-  const teamAbbrev = getTeamAbbrev(teamName);
+  const teamAbbrev = player.teamAbbrev || getTeamAbbrev(teamName);
 
   // Team avatar badge color map
   const getBadgeBg = (abbrev) => {
@@ -70,16 +75,30 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
       {/* ── Card Header ─────────────────────────────────────── */}
       <div className="card-header">
         <div className="player-info-group">
-          {/* Team Avatar Badge */}
-          <div className="team-avatar-badge" style={{ backgroundColor: badgeBg }}>
-            {teamAbbrev}
-          </div>
+          {/* Player avatar: photo → team logo → initials */}
+          <PlayerAvatar
+            size={36}
+            photoUrl={player.photoUrl}
+            teamLogoUrl={player.teamLogoUrl}
+            teamAbbrev={teamAbbrev}
+            name={playerName}
+          />
 
           <div className="player-names-col">
             <div className="player-name-text">{playerName}</div>
             <div className="prop-line-text">{line} {propName}</div>
             
             <div className="team-tags-row">
+              {player.teamLogoUrl ? (
+                <img
+                  src={player.teamLogoUrl}
+                  alt={teamAbbrev}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  style={{ width: 18, height: 18, objectFit: 'contain' }}
+                />
+              ) : null}
               <span className="badge-tag-team" style={{ backgroundColor: badgeBg }}>{teamAbbrev}</span>
               <span className="badge-tag-league">{sport || 'NBA'}</span>
               <span className="matchup-time-text">Tue 7:00pm vs Opp</span>
@@ -121,14 +140,14 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectP
       </div>
 
       {/* ── Mini Bar Chart ───────────────────────────────────── */}
-      <div style={{ background: '#0f141f', borderRadius: '8px', padding: '0.6rem', border: '1px solid #1c2638' }}>
+      <div style={{ background: '#0f141f', borderRadius: '10px', padding: '0.6rem', border: '1px solid rgba(255,255,255,0.08)' }}>
         {chartView === 'season' ? (
           <div style={{ height: '70px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#10b981' }}>{seasonAvg}</span>
             <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase' }}>Season Average</span>
           </div>
         ) : (
-          <MiniBarChart values={gameLogs} line={line} maxBars={chartView === 'last5' ? 5 : 10} />
+          <MiniBarChart values={gameLogs} line={line} maxBars={chartView === 'last5' ? 5 : 10} opponents={shownOpponents} />
         )}
 
         {/* Chart View Switcher Tabs */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MiniBarChart from './MiniBarChart';
+import PlayerAvatar from './PlayerAvatar';
 
 const GRADE_META = {
   A: { label: 'Strong', color: '#10b981' },
@@ -21,6 +22,12 @@ const pct = (v) => {
   const n = Number(v);
   if (isNaN(n)) return '-';
   return `${n}%`;
+};
+
+// Team abbrev fallback derived from the full team name
+const deriveAbbrev = (teamName) => {
+  if (!teamName || teamName === '-') return '?';
+  return teamName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase();
 };
 
 function PlayerDetailModal({ prop, onClose }) {
@@ -51,6 +58,10 @@ function PlayerDetailModal({ prop, onClose }) {
   );
   const shownLogs = range === 'last5' ? gameLogs.slice(0, 5) : gameLogs;
 
+  // Opponents aligned with gameLogs (most recent first) — slice the same window
+  const rawGames = Array.isArray(prop.games) ? prop.games : null;
+  const shownOpponents = rawGames && (range === 'last5' ? rawGames.slice(0, 5) : rawGames.slice(0, 10));
+
   // Stats — hit% readouts follow the selected range
   const last5Avg = fmt(prop.last5Avg);
   const last10Avg = fmt(prop.last10Avg);
@@ -61,6 +72,9 @@ function PlayerDetailModal({ prop, onClose }) {
   const confUpper = typeof conf === 'object' && conf !== null ? conf.upper : null;
 
   const sources = (Array.isArray(prop.sourceMetadata) ? prop.sourceMetadata : []).filter(Boolean).join(', ');
+
+  const lineSource = prop.lineSource || prop.line_source || '';
+  const bookmaker = prop.bookmaker || '';
 
   const isOver = predictedValue >= line;
 
@@ -76,12 +90,17 @@ function PlayerDetailModal({ prop, onClose }) {
     };
   }, [onClose]);
 
-  const teamAbbrev = teamName !== '-'
-    ? teamName.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()
-    : '?';
+  const teamAbbrev = prop.teamAbbrev || deriveAbbrev(teamName);
 
   const activeCellStyle = (active, color) =>
     active ? { border: `1px solid ${color}`, boxShadow: `inset 0 0 0 1px ${color}` } : {};
+
+  const panelStyle = {
+    marginTop: '0.85rem',
+    background: '#0f141f',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: '16px',
+  };
 
   return (
     <div
@@ -118,7 +137,7 @@ function PlayerDetailModal({ prop, onClose }) {
           overflowY: 'auto',
           background: 'var(--bg-card)',
           border: '1px solid var(--bg-card-border)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: '20px',
           boxShadow: 'var(--shadow)',
           padding: '1.25rem',
           position: 'relative',
@@ -153,29 +172,34 @@ function PlayerDetailModal({ prop, onClose }) {
           &times;
         </button>
 
-        {/* ── Header: player / team / prop ─────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingRight: '2.5rem' }}>
-          <div style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-purple))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 800,
-            fontSize: '0.8rem',
-            flexShrink: 0,
-          }}>
-            {teamAbbrev}
-          </div>
+        {/* ── Header: avatar / player / team / grade ─────────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', paddingRight: '2.5rem' }}>
+          <PlayerAvatar
+            size={52}
+            photoUrl={prop.photoUrl}
+            teamLogoUrl={prop.teamLogoUrl}
+            teamAbbrev={teamAbbrev}
+            name={playerName}
+          />
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
               {playerName}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>{teamName}</span>
+            {/* Grade accent underline */}
+            <div style={{ height: '3px', width: '38px', borderRadius: '2px', background: gradeMeta.color, marginTop: '0.3rem' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>
+                <PlayerAvatar
+                  size={18}
+                  photoUrl={null}
+                  teamLogoUrl={prop.teamLogoUrl}
+                  teamAbbrev={teamAbbrev}
+                  name={teamName}
+                  rounded={false}
+                />
+                {teamName}
+              </span>
               <span style={{
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',
@@ -195,7 +219,7 @@ function PlayerDetailModal({ prop, onClose }) {
             <span style={{
               width: '40px',
               height: '40px',
-              borderRadius: '10px',
+              borderRadius: '12px',
               background: gradeMeta.color,
               color: '#fff',
               display: 'flex',
@@ -215,56 +239,108 @@ function PlayerDetailModal({ prop, onClose }) {
 
         {/* ── Predicted vs line ────────────────────────────────── */}
         <div style={{
-          marginTop: '1rem',
+          marginTop: '0.85rem',
           background: 'var(--surface)',
           border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
+          borderRadius: '16px',
           padding: '0.85rem 1rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '1rem',
         }}>
-          <div>
-            <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
-              Predicted vs Line
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
+                Predicted vs Line
+              </div>
+              <div style={{ marginTop: '0.25rem', fontSize: '1.3rem', fontWeight: 800, lineHeight: 1.2 }}>
+                <span style={{ color: isOver ? '#10b981' : '#ef4444' }}>{fmt(predictedValue)}</span>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem', margin: '0 0.45rem' }}>vs line</span>
+                <span style={{ color: '#e2e8f0' }}>{fmt(line)}</span>
+              </div>
             </div>
-            <div style={{ marginTop: '0.25rem', fontSize: '1.3rem', fontWeight: 800, lineHeight: 1.2 }}>
-              <span style={{ color: isOver ? '#10b981' : '#ef4444' }}>{fmt(predictedValue)}</span>
-              <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.95rem', margin: '0 0.45rem' }}>vs line</span>
-              <span style={{ color: '#e2e8f0' }}>{fmt(line)}</span>
+
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <span style={{
+                background: isOver ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: isOver ? '#10b981' : '#ef4444',
+                border: `1px solid ${isOver ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                padding: '0.2rem 0.7rem',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                display: 'inline-block',
+              }}>
+                {isOver ? 'OVER' : 'UNDER'}
+              </span>
+              {confLower !== null && confUpper !== null && (
+                <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Conf {Number(confLower).toFixed(0)}–{Number(confUpper).toFixed(0)}%
+                </div>
+              )}
             </div>
           </div>
 
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <span style={{
-              background: isOver ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-              color: isOver ? '#10b981' : '#ef4444',
-              border: `1px solid ${isOver ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
-              padding: '0.2rem 0.7rem',
-              borderRadius: 'var(--radius-pill)',
-              fontSize: '0.72rem',
-              fontWeight: 800,
-              display: 'inline-block',
+          {/* Line-source badge + confidence range row */}
+          {(lineSource === 'sportsbook' || lineSource === 'model' || (confLower !== null && confUpper !== null)) && (
+            <div style={{
+              marginTop: '0.6rem',
+              paddingTop: '0.6rem',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+              flexWrap: 'wrap',
             }}>
-              {isOver ? 'OVER' : 'UNDER'}
-            </span>
-            {confLower !== null && confUpper !== null && (
-              <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                Conf {Number(confLower).toFixed(0)}–{Number(confUpper).toFixed(0)}%
-              </div>
-            )}
-          </div>
+              {lineSource === 'sportsbook' ? (
+                <span
+                  title={bookmaker ? `Book line · ${bookmaker}` : 'Line from sportsbook'}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#10b981',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    padding: '0.15rem 0.6rem',
+                    borderRadius: 'var(--radius-pill)',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                  }}
+                >
+                  Book line{bookmaker ? ` · ${bookmaker}` : ''}
+                </span>
+              ) : lineSource === 'model' ? (
+                <span
+                  title="Line from our model"
+                  style={{
+                    background: 'var(--surface)',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border)',
+                    padding: '0.15rem 0.6rem',
+                    borderRadius: 'var(--radius-pill)',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                  }}
+                >
+                  Model line
+                </span>
+              ) : null}
+
+              {confLower !== null && confUpper !== null && (
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Range: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{Number(confLower).toFixed(0)} – {Number(confUpper).toFixed(0)}</span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Chart + Last 5 / Last 10 toggle ──────────────────── */}
-        <div style={{
-          marginTop: '1rem',
-          background: '#0f141f',
-          border: '1px solid #1c2638',
-          borderRadius: 'var(--radius)',
-          padding: '0.8rem',
-        }}>
+        <div style={panelStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Last {range === 'last5' ? '5' : '10'} Games
@@ -285,11 +361,11 @@ function PlayerDetailModal({ prop, onClose }) {
             </div>
           </div>
 
-          <MiniBarChart values={shownLogs} line={line} maxBars={range === 'last5' ? 5 : 10} />
+          <MiniBarChart values={shownLogs} line={line} maxBars={range === 'last5' ? 5 : 10} opponents={shownOpponents} />
         </div>
 
         {/* ── Stats grid ───────────────────────────────────────── */}
-        <div className="expanded-stats-grid" style={{ marginTop: '1rem' }}>
+        <div className="expanded-stats-grid" style={{ marginTop: '0.85rem', borderRadius: '16px' }}>
           <div className="stat-cell-box cell-cyan" style={activeCellStyle(false, 'rgba(56, 189, 248, 0.7)')}>
             <span className="stat-cell-lbl">Season Avg</span>
             <span className="stat-cell-num">{seasonAvg}</span>
@@ -314,7 +390,7 @@ function PlayerDetailModal({ prop, onClose }) {
 
         {/* ── Data source attribution ──────────────────────────── */}
         <div style={{
-          marginTop: '1rem',
+          marginTop: '0.85rem',
           paddingTop: '0.75rem',
           borderTop: '1px solid var(--border)',
           display: 'flex',

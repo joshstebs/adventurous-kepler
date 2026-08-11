@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import MiniBarChart from './MiniBarChart';
 
-function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport }) {
+function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport, onSelectProp }) {
   const [chartView, setChartView] = useState('last5'); // 'last5', 'last10', 'season'
   const [selectedSide, setSelectedSide] = useState(null); // 'over', 'under'
   const [expanded, setExpanded] = useState(false);
@@ -61,7 +61,12 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport }) {
   const badgeBg = getBadgeBg(teamAbbrev);
 
   return (
-    <div className="prop-card">
+    <div
+      className="prop-card"
+      onClick={() => onSelectProp && onSelectProp(player)}
+      title="View prop details"
+      style={{ cursor: 'pointer' }}
+    >
       {/* ── Card Header ─────────────────────────────────────── */}
       <div className="card-header">
         <div className="player-info-group">
@@ -86,13 +91,13 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport }) {
         <div className="side-buttons-group">
           <button 
             className={`over-under-btn ${selectedSide === 'over' ? 'btn-over' : 'btn-outline'}`}
-            onClick={() => setSelectedSide(selectedSide === 'over' ? null : 'over')}
+            onClick={(e) => { e.stopPropagation(); setSelectedSide(selectedSide === 'over' ? null : 'over') }}
           >
             OVER
           </button>
           <button 
             className={`over-under-btn ${selectedSide === 'under' ? 'btn-under' : 'btn-outline'}`}
-            onClick={() => setSelectedSide(selectedSide === 'under' ? null : 'under')}
+            onClick={(e) => { e.stopPropagation(); setSelectedSide(selectedSide === 'under' ? null : 'under') }}
           >
             UNDER
           </button>
@@ -154,7 +159,7 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span 
             style={{ cursor: 'pointer', fontSize: '0.9rem', color: '#94a3b8' }}
-            onClick={() => setExpanded(!expanded)}
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
             title="Toggle Detailed Breakdown"
           >
             ⓘ
@@ -170,7 +175,7 @@ function PlayerPropCard({ player, isFavorite, onToggleFavorite, sport }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span 
             className={`star ${isFavorite ? 'pulse' : ''}`}
-            onClick={() => onToggleFavorite(playerId)}
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite(playerId) }}
             style={{ fontSize: '1rem', cursor: 'pointer', color: isFavorite ? '#eab308' : '#64748b' }}
           >
             {isFavorite ? '★' : '☆'}

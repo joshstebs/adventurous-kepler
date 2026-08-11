@@ -1,9 +1,14 @@
 const request = require('supertest');
 const { fetchPlayers } = require('../services/fetchers');
+const { fetchOdds } = require('../services/oddsApi');
 const app = require('../server.js');
 
 jest.mock('../services/fetchers', () => ({
   fetchPlayers: jest.fn()
+}));
+
+jest.mock('../services/oddsApi', () => ({
+  fetchOdds: jest.fn()
 }));
 
 describe('API Endpoints', () => {
@@ -11,14 +16,23 @@ describe('API Endpoints', () => {
     {
       id: 'player-1',
       name: 'Test Player',
-      stats: { teamId: 'TEST_TEAM', points: 20, goals: 2, passingYards: 250, totalBases: 3 },
-      sources: ['ESPN']
+      teamId: 'TEST_TEAM',
+      teamName: 'Test Team',
+      stats: { points: 20, goals: 2, passingYards: 250, totalBases: 3 },
+      gameLogs: {
+        points: [25, 18, 22, 30, 15, 21, 19, 24, 20, 17],
+        goals: [1, 0, 2, 1, 0, 3, 0, 1, 2, 0],
+        passingYards: [280, 210, 300, 240, 190, 260, 220, 310, 250, 200],
+        totalBases: [3, 1, 4, 2, 0, 3, 2, 4, 1, 2],
+      },
+      sources: ['Test Source'],
     }
   ];
 
   beforeEach(() => {
     jest.clearAllMocks();
     fetchPlayers.mockResolvedValue(staticPlayers);
+    fetchOdds.mockResolvedValue({ featured: [], props: [] });
   });
 
   const sports = ['mlb', 'nfl', 'nba', 'nhl'];

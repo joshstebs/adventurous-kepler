@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-function PropTable({ propsData, favorites = [], onToggleFavorite }) {
+function PropTable({ propsData, favorites = [], onToggleFavorite, onSelectProp }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [search, setSearch] = useState('');
@@ -77,7 +77,7 @@ function PropTable({ propsData, favorites = [], onToggleFavorite }) {
     return (
       <span
         className={`star ${isFav ? 'pulse' : ''}`}
-        onClick={() => onToggleFavorite(playerId)}
+        onClick={(e) => { e.stopPropagation(); onToggleFavorite(playerId) }}
         title={isFav ? 'Remove from favorites' : 'Add to favorites'}
       >
         {isFav ? '★' : '☆'}
@@ -188,7 +188,12 @@ function PropTable({ propsData, favorites = [], onToggleFavorite }) {
           </thead>
           <tbody>
             {paginatedData.map((row, idx) => (
-              <tr key={row.id || `${row.playerId}-${idx}`} style={{ animationDelay: `${idx * 0.05}s` }}>
+              <tr
+                key={row.id || `${row.playerId}-${idx}`}
+                style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer' }}
+                onClick={() => onSelectProp && onSelectProp(row)}
+                title="View prop details"
+              >
                 <td className="sticky-col" style={{ fontWeight: 600, color: '#fff' }}>
                   {row.playerName || row.name || 'Unknown'}
                 </td>

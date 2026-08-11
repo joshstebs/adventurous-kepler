@@ -7,6 +7,7 @@ import useProps from './hooks/useProps'
 import AuthModal from './components/AuthModal'
 import { AuthProvider, AuthContext } from './context/AuthContext'
 import PlayerPropCard from './components/PlayerPropCard'
+import PlayerDetailModal from './components/PlayerDetailModal'
 
 function AppContent() {
   const [sport, setSport] = useState('NBA')
@@ -16,6 +17,7 @@ function AppContent() {
   
   const { user, token, logout } = useContext(AuthContext)
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [selectedProp, setSelectedProp] = useState(null)
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters)
@@ -255,6 +257,7 @@ function AppContent() {
                     sport={sport} 
                     isFavorite={favorites.includes(item.playerId || item.id)} 
                     onToggleFavorite={onToggleFavorite} 
+                    onSelectProp={setSelectedProp} 
                   />
                 ))}
               </div>
@@ -290,6 +293,7 @@ function AppContent() {
       </nav>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {selectedProp && <PlayerDetailModal prop={selectedProp} onClose={() => setSelectedProp(null)} />}
     </div>
   )
 }

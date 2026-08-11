@@ -11,6 +11,7 @@ const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Allow the Vite dev server (localhost:5173) and any other origin to call the API
 app.use(cors());
@@ -21,23 +22,43 @@ const favoritesRouter = require('./routes/favorites');
 app.use('/api/auth', authRouter);
 app.use('/api/favorites', favoritesRouter);
 
+// In-memory cache: full refreshes hit many upstream APIs, so serve fresh
+// predictions for CACHE_TTL_MS before recomputing.
+const cache = {};
+
+async function buildPredictions(sport) {
+  const [players, oddsResult] = await Promise.all([fetchPlayers(sport), fetchOdds(sport)]);
+  const odds = oddsResult.featured || [];
+  const props = oddsResult.props || [];
+  const predictions = computePredictions(sport, players, odds, props);
+  predictions.odds = odds;
+  predictions.props = props;
+  predictions.generatedAt = new Date().toISOString();
+  predictions.playerCount = players.length;
+  return predictions;
+}
+
 app.get('/api/:sport', async (req, res) => {
   const sport = req.params.sport.toUpperCase();
   const validSports = ['MLB', 'NFL', 'NHL', 'NBA'];
   if (!validSports.includes(sport)) {
-    return res.status(400).json({ error: 'Invalid sport. Choose from MLB, NFL, NHL, NBA.' });
+    return res.status(400).json({ error: 'Invalid sport. Choose from MLB, NFL, NBA, NHL.' });
   }
   try {
-    const players = await fetchPlayers(sport);
-    const odds = await fetchOdds(sport);
-    const predictions = computePredictions(sport, players, odds);
-    predictions.odds = odds;
+    const cached = cache[sport];
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return res.json(cached.data);
+    }
+
+    const predictions = await buildPredictions(sport);
+
     const dataDir = path.join(__dirname, 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir);
     }
-    const outPath = path.join(dataDir, `${sport}.json`);
-    fs.writeFileSync(outPath, JSON.stringify(predictions, null, 2));
+    fs.writeFileSync(path.join(dataDir, `${sport}.json`), JSON.stringify(predictions, null, 2));
+
+    cache[sport] = { ts: Date.now(), data: predictions };
     res.json(predictions);
   } catch (err) {
     console.error('Error processing request:', err);
@@ -53,4 +74,3 @@ if (require.main === module) {
 }
 
 module.exports = app;
-
